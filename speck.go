@@ -35,15 +35,24 @@ func lcs32(w uint32, s uint) uint32 { return (w << s) | (w >> (32-s)); }
 func rcs16(w uint16, s uint) uint16 { return (w >> s) | (w << (16-s)); }
 func lcs16(w uint16, s uint) uint16 { return (w << s) | (w >> (16-s)); }
 
-func kx_64_256(ink [4]uint64) (outk [34]uint64) {
+// xxx_wordsize_keywords
+
+// key expansion: take the key (the output of urandom or PBKDF2) and generate 
+// a key word for each SPECK round; for 128/256 SPECK, that's 34 round subkeys;
+// key is presented as 4 64-bit words, expanded key as an array of 34 words.
+
+func kx_64_4(ink [4]uint64) (outk [34]uint64) {
 	T := uint(34)
 	m := uint(4)
 	
+	// first subkey is special, comes right from the key
 	outk[0] = ink[0]
 
 	for i := uint(0); i < (T-1); i++ {
 		idx := 1 + i % (m-1)
 
+		// SPECK just runs the SPECK round function to expand the
+		// key; extremely simple.
 		ink[idx] = rcs64(ink[idx], 8)
 		ink[idx] += ink[0]
 		ink[idx] ^= uint64(i)
@@ -56,24 +65,52 @@ func kx_64_256(ink [4]uint64) (outk [34]uint64) {
 	return
 }
 
-func enc_64_256(block [2]uint64, kx [34]uint64) [2]uint64 {
+// encryption; take the plaintext block, 2 64 bit words, and the expanded
+// key, run the round function, return the ciphertext block
+
+func enc_64_4(block [2]uint64, kx [34]uint64) [2]uint64 {
 	T := uint(34)
 
+	// number of rounds scales with key size && block size
 	for i := uint(0); i < T; i++ {
+		// very simple round function, add/xor/rotate;
+		// threefish found simple round function with
+		// lots of iterations superior to complex round
+		// function with fewer; SPECK has ~1/2 to 1/3
+		// the rounds, but is also a lower security 
+		// cipher.
+
+		// rotate; diffuse bits. threefish figured this
+		// out by trying all rotation constants and selecting
+		// the ones that maximized hamming distance
 		block[1] = rcs64(block[1], 8)
+
+		// add blocks; nonlinearity from xor and add
 		block[1] += block[0]
+
+		// mix in keys
 		block[1] ^= kx[i]
+
+		// rotate the other block
 		block[0] = lcs64(block[0], 3)
+
+		// xor again; speck paper says this also models
+		// feistel-like structure wrt add mod 2^n and 
+		// xor's binary add
 		block[0] ^= block[1]		
 	}
 
 	return block
 }
 
-func dec_64_256(block [2]uint64, kx [34]uint64) [2]uint64 {
+// decryption; ciphertext block in, plaintext block out, same
+// expanded key
+
+func dec_64_4(block [2]uint64, kx [34]uint64) [2]uint64 {
 	T := uint(34)
 
 	for i := T; i > 0; i-- {
+		// inverse block function
 		block[0] ^= block[1]
 		block[0] = rcs64(block[0], 3)
 		block[1] ^= kx[i-1]
@@ -84,7 +121,7 @@ func dec_64_256(block [2]uint64, kx [34]uint64) [2]uint64 {
 	return block
 }
 
-func kx_32_128(ink [4]uint32) (outk [27]uint32) {
+func kx_32_4(ink [4]uint32) (outk [27]uint32) {
 	T := uint(27)
 	m := uint(4)
 	
@@ -105,7 +142,7 @@ func kx_32_128(ink [4]uint32) (outk [27]uint32) {
 	return
 }
 
-func enc_32_128(block [2]uint32, kx [27]uint32) [2]uint32 {
+func enc_32_4(block [2]uint32, kx [27]uint32) [2]uint32 {
 	T := uint(27)
 
 	for i := uint(0); i < T; i++ {
@@ -119,7 +156,7 @@ func enc_32_128(block [2]uint32, kx [27]uint32) [2]uint32 {
 	return block
 }
 
-func dec_32_128(block [2]uint32, kx [27]uint32) [2]uint32 {
+func dec_32_4(block [2]uint32, kx [27]uint32) [2]uint32 {
 	T := uint(27)
 
 	for i := T; i > 0; i-- {
@@ -133,7 +170,7 @@ func dec_32_128(block [2]uint32, kx [27]uint32) [2]uint32 {
 	return block
 }
 
-func kx_16_64(ink [4]uint16) (outk [22]uint16) {
+func kx_16_4(ink [4]uint16) (outk [22]uint16) {
 	T := uint(22)
 	m := uint(4)
 	
@@ -154,7 +191,7 @@ func kx_16_64(ink [4]uint16) (outk [22]uint16) {
 	return
 }
 
-func enc_16_64(block [2]uint16, kx [22]uint16) [2]uint16 {
+func enc_16_4(block [2]uint16, kx [22]uint16) [2]uint16 {
 	T := uint(22)
 
 	for i := uint(0); i < T; i++ {
@@ -168,7 +205,7 @@ func enc_16_64(block [2]uint16, kx [22]uint16) [2]uint16 {
 	return block
 }
 
-func dec_16_64(block [2]uint16, kx [22]uint16) [2]uint16 {
+func dec_16_4(block [2]uint16, kx [22]uint16) [2]uint16 {
 	T := uint(22)
 
 	for i := T; i > 0; i-- {
@@ -225,15 +262,23 @@ func dec_16_64(block [2]uint16, kx [22]uint16) [2]uint16 {
 // { 0x65736f6874206e49, 0x202e72656e6f6f70, }
 // { 0x4109010405c0f53e, 0x4eeeb48d9c188f43, }
 
-// 64 bit word
+// the goo required to integrate with Golang crypto
+
+// this will be the data passed as a "cipher.Block", but
+// just holds the expanded key (all the state we need);
+// one for each word/key size.
 type speck128k256 struct {
 	xk [34]uint64
 }
 
+// part of cipher.Block interface
 func (c *speck128k256) BlockSize() int { return 16; }
 
 type xfrm128 func([2]uint64, [34]uint64) [2]uint64;
 
+// handle encryption/decryption in terms of byte slices
+// instead of words. I could compress all these into one
+// cipher.Block type and one function but why bother?
 func (c *speck128k256) xfrm(dst, src []byte, fn xfrm128) {
 	var block [2]uint64
 	block[0] = binary.BigEndian.Uint64(src[0:])
@@ -243,8 +288,8 @@ func (c *speck128k256) xfrm(dst, src []byte, fn xfrm128) {
 	binary.BigEndian.PutUint64(dst[8:], ct[1])
 }
 
-func (c *speck128k256) Decrypt(dst, src []byte) { c.xfrm(dst, src, dec_64_256) }
-func (c *speck128k256) Encrypt(dst, src []byte) { c.xfrm(dst, src, enc_64_256) }
+func (c *speck128k256) Decrypt(dst, src []byte) { c.xfrm(dst, src, dec_64_4) }
+func (c *speck128k256) Encrypt(dst, src []byte) { c.xfrm(dst, src, enc_64_4) }
 
 // 32 bit word
 type speck64k128 struct {
@@ -264,8 +309,8 @@ func (c *speck64k128) xfrm(dst, src []byte, fn xfrm64) {
 	binary.BigEndian.PutUint32(dst[4:], ct[1])
 }
 
-func (c *speck64k128) Decrypt(dst, src []byte) { c.xfrm(dst, src, dec_32_128) ; }
-func (c *speck64k128) Encrypt(dst, src []byte) { c.xfrm(dst, src, enc_32_128) ; }
+func (c *speck64k128) Decrypt(dst, src []byte) { c.xfrm(dst, src, dec_32_4) ; }
+func (c *speck64k128) Encrypt(dst, src []byte) { c.xfrm(dst, src, enc_32_4) ; }
 
 // 16 bit word
 type speck32k64 struct {
@@ -285,13 +330,20 @@ func (c *speck32k64) xfrm(dst, src []byte, fn xfrm32) {
 	binary.BigEndian.PutUint16(dst[2:], ct[1])
 }
 
-func (c *speck32k64) Decrypt(dst, src []byte) { c.xfrm(dst, src, dec_16_64) ; }
-func (c *speck32k64) Encrypt(dst, src []byte) { c.xfrm(dst, src, enc_16_64) ; }
+func (c *speck32k64) Decrypt(dst, src []byte) { c.xfrm(dst, src, dec_16_4) ; }
+func (c *speck32k64) Encrypt(dst, src []byte) { c.xfrm(dst, src, enc_16_4) ; }
 
 type specksz int
 
+// select 128/256 SPECK (parameters like Rijndael)
 var B128K256 specksz = 64
+
+// select 64/128 SPECK (parameters like 3DES, Blowfish)
 var B64K128 specksz = 32
+
+// select 32/64 SPECK (i don't know a cipher with a 32 bit block size); 
+// this is the kind of thing you might use to protect code in memory on
+// a 16-bit microcontroller.
 var B32K64 specksz = 16
 
 func NewCipher(k []byte, ws specksz) (cipher.Block, error) {
@@ -302,7 +354,7 @@ func NewCipher(k []byte, ws specksz) (cipher.Block, error) {
 			ink[i] = binary.BigEndian.Uint64(k[i * 8:])
 		}
 		return &speck128k256{
-			xk: kx_64_256(ink),
+			xk: kx_64_4(ink),
 		}, nil
 	case B64K128:
 		var ink [4]uint32
@@ -310,7 +362,7 @@ func NewCipher(k []byte, ws specksz) (cipher.Block, error) {
 			ink[i] = binary.BigEndian.Uint32(k[i * 4:])
 		}
 		return &speck64k128{
-			xk: kx_32_128(ink),
+			xk: kx_32_4(ink),
 		}, nil
 	case B32K64:
 		var ink [4]uint16
@@ -318,7 +370,7 @@ func NewCipher(k []byte, ws specksz) (cipher.Block, error) {
 			ink[i] = binary.BigEndian.Uint16(k[i * 2:])
 		}
 		return &speck32k64{
-			xk: kx_16_64(ink),
+			xk: kx_16_4(ink),
 		}, nil
 	}
 
