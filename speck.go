@@ -25,8 +25,6 @@ import (
 //		= 28 or 29 if n = 48, m = 2 or 3
 //		= 32, 33, or 34 if n = 64, m = 2, 3, or 4
 
-// yes, this is hydrocephalic, but I just can't deal with encoding.Binary
-
 func kx_64_256(ink [4]uint64) (outk [34]uint64) {
 	T := uint(34)
 	m := uint(4)
@@ -260,23 +258,19 @@ type speck128k256 struct {
 
 func (c *speck128k256) BlockSize() int { return 16; }
 
-func (c *speck128k256) Decrypt(dst, src []byte) {
+type xfrm128 func([2]uint64, [34]uint64) [2]uint64;
+
+func (c *speck128k256) xfrm(dst, src []byte, fn xfrm128) {
 	var block [2]uint64
 	block[0] = binary.BigEndian.Uint64(src[0:])
 	block[1] = binary.BigEndian.Uint64(src[8:])
-	ct := dec_64_256(block, c.xk)
+	ct := fn(block, c.xk)
 	binary.BigEndian.PutUint64(dst[0:], ct[0])
 	binary.BigEndian.PutUint64(dst[8:], ct[1])
 }
 
-func (c *speck128k256) Encrypt(dst, src []byte) {
-	var block [2]uint64
-	block[0] = binary.BigEndian.Uint64(src[0:])
-	block[1] = binary.BigEndian.Uint64(src[8:])
-	ct := enc_64_256(block, c.xk)
-	binary.BigEndian.PutUint64(dst[0:], ct[0])
-	binary.BigEndian.PutUint64(dst[8:], ct[1])
-}
+func (c *speck128k256) Decrypt(dst, src []byte) { c.xfrm(dst, src, dec_64_256) }
+func (c *speck128k256) Encrypt(dst, src []byte) { c.xfrm(dst, src, enc_64_256) }
 
 // 32 bit word
 type speck64k128 struct {
@@ -285,23 +279,19 @@ type speck64k128 struct {
 
 func (c *speck64k128) BlockSize() int { return 8; }
 
-func (c *speck64k128) Decrypt(dst, src []byte) {
+type xfrm64 func([2]uint32, [27]uint32) [2]uint32;
+
+func (c *speck64k128) xfrm(dst, src []byte, fn xfrm64) {
 	var block [2]uint32
 	block[0] = binary.BigEndian.Uint32(src[0:])
 	block[1] = binary.BigEndian.Uint32(src[4:])
-	ct := dec_32_128(block, c.xk)
+	ct := fn(block, c.xk)
 	binary.BigEndian.PutUint32(dst[0:], ct[0])
 	binary.BigEndian.PutUint32(dst[4:], ct[1])
 }
 
-func (c *speck64k128) Encrypt(dst, src []byte) {
-	var block [2]uint32
-	block[0] = binary.BigEndian.Uint32(src[0:])
-	block[1] = binary.BigEndian.Uint32(src[4:])
-	ct := enc_32_128(block, c.xk)
-	binary.BigEndian.PutUint32(dst[0:], ct[0])
-	binary.BigEndian.PutUint32(dst[4:], ct[1])
-}
+func (c *speck64k128) Decrypt(dst, src []byte) { c.xfrm(dst, src, dec_32_128) ; }
+func (c *speck64k128) Encrypt(dst, src []byte) { c.xfrm(dst, src, enc_32_128) ; }
 
 // 16 bit word
 type speck32k64 struct {
@@ -310,23 +300,19 @@ type speck32k64 struct {
 
 func (c *speck32k64) BlockSize() int { return 4; }
 
-func (c *speck32k64) Decrypt(dst, src []byte) {
+type xfrm32 func([2]uint16, [22]uint16) [2]uint16;
+
+func (c *speck32k64) xfrm(dst, src []byte, fn xfrm32) {
 	var block [2]uint16
 	block[0] = binary.BigEndian.Uint16(src[0:])
 	block[1] = binary.BigEndian.Uint16(src[2:])
-	ct := dec_16_64(block, c.xk)
+	ct := fn(block, c.xk)
 	binary.BigEndian.PutUint16(dst[0:], ct[0])
 	binary.BigEndian.PutUint16(dst[2:], ct[1])
 }
 
-func (c *speck32k64) Encrypt(dst, src []byte) {
-	var block [2]uint16
-	block[0] = binary.BigEndian.Uint16(src[0:])
-	block[1] = binary.BigEndian.Uint16(src[2:])
-	ct := enc_16_64(block, c.xk)
-	binary.BigEndian.PutUint16(dst[0:], ct[0])
-	binary.BigEndian.PutUint16(dst[2:], ct[1])
-}
+func (c *speck32k64) Decrypt(dst, src []byte) { c.xfrm(dst, src, dec_16_64) ; }
+func (c *speck32k64) Encrypt(dst, src []byte) { c.xfrm(dst, src, enc_16_64) ; }
 
 type specksz int
 
