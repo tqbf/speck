@@ -2,6 +2,10 @@ package main
 
 // or, a place you'd really like to have basic generics
 
+// DO I REALLY HAVE TO TELL YOU NOT TO USE THIS? No, I really don't, and
+// am kind of flattering myself by even saying it out loud, but on the 
+// off chance it isn't clear: DON'T USE THIS. YOU ARE CRAZY. GO AWAY.
+
 import (
 	"crypto/cipher"
 	"fmt"
