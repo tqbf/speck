@@ -10,6 +10,7 @@ import (
 	"crypto/cipher"
 	"fmt"
 	"errors"
+	"encoding/binary"
 )	
 
 // n = word size (16, 24, 32, 48, or 64)
@@ -25,79 +26,6 @@ import (
 //		= 32, 33, or 34 if n = 64, m = 2, 3, or 4
 
 // yes, this is hydrocephalic, but I just can't deal with encoding.Binary
-
-func x64(in []byte) (out uint64) {
-	if len(in) < 8 {
-		panic("short block")
-	}
-
-	out =	(uint64(in[0]) << 56) |
-		(uint64(in[1]) << 48) |
-		(uint64(in[2]) << 40) |
-		(uint64(in[3]) << 32) |
-		(uint64(in[4]) << 24) |
-		(uint64(in[5]) << 16) |
-		(uint64(in[6]) << 8)  |
-		(uint64(in[7]) << 0)  ;
-	return
-}
-
-func w64(in uint64, out []byte) {
-	if len(out) < 8 {
-		panic("short block")
-	}
-
-	out[0] = byte(in >> 56) & 0xff
-	out[1] = byte(in >> 48) & 0xff
-	out[2] = byte(in >> 40) & 0xff
-	out[3] = byte(in >> 32) & 0xff
-	out[4] = byte(in >> 24) & 0xff
-	out[5] = byte(in >> 16) & 0xff
-	out[6] = byte(in >> 8) & 0xff
-	out[7] = byte(in >> 0) & 0xff
-}
-
-func x32(in []byte) (out uint32) {
-	if len(in) < 4 {
-		panic("short block")
-	}
-
-	out =	(uint32(in[0]) << 24) |
-		(uint32(in[1]) << 16) |
-		(uint32(in[2]) << 8) |
-		(uint32(in[3]) << 0) ;
-	return
-}
-
-func w32(in uint32, out []byte) {
-	if len(out) < 4 {
-		panic("short block")
-	}
-
-	out[0] = byte(in >> 24) & 0xff
-	out[1] = byte(in >> 16) & 0xff
-	out[2] = byte(in >> 8) & 0xff
-	out[3] = byte(in >> 0) & 0xff
-}
-
-func x16(in []byte) (out uint16) {
-	if len(in) < 2 {
-		panic("short block")
-	}
-
-	out =	(uint16(in[0]) << 8) |
-		(uint16(in[1]) << 0) ;
-	return
-}
-
-func w16(in uint16, out []byte) {
-	if len(out) < 2 {
-		panic("short block")
-	}
-
-	out[0] = byte(in >> 8) & 0xff
-	out[1] = byte(in >> 0) & 0xff
-}
 
 func kx_64_256(ink [4]uint64) (outk [34]uint64) {
 	T := uint(34)
@@ -334,20 +262,20 @@ func (c *speck128k256) BlockSize() int { return 16; }
 
 func (c *speck128k256) Decrypt(dst, src []byte) {
 	var block [2]uint64
-	block[0] = x64(src[0:])
-	block[1] = x64(src[8:])
+	block[0] = binary.BigEndian.Uint64(src[0:])
+	block[1] = binary.BigEndian.Uint64(src[8:])
 	ct := dec_64_256(block, c.xk)
-	w64(ct[0], dst[0:])
-	w64(ct[1], dst[8:])
+	binary.BigEndian.PutUint64(dst[0:], ct[0])
+	binary.BigEndian.PutUint64(dst[8:], ct[1])
 }
 
 func (c *speck128k256) Encrypt(dst, src []byte) {
 	var block [2]uint64
-	block[0] = x64(src[0:])
-	block[1] = x64(src[8:])
+	block[0] = binary.BigEndian.Uint64(src[0:])
+	block[1] = binary.BigEndian.Uint64(src[8:])
 	ct := enc_64_256(block, c.xk)
-	w64(ct[0], dst[0:])
-	w64(ct[1], dst[8:])
+	binary.BigEndian.PutUint64(dst[0:], ct[0])
+	binary.BigEndian.PutUint64(dst[8:], ct[1])
 }
 
 // 32 bit word
@@ -359,20 +287,20 @@ func (c *speck64k128) BlockSize() int { return 8; }
 
 func (c *speck64k128) Decrypt(dst, src []byte) {
 	var block [2]uint32
-	block[0] = x32(src[0:])
-	block[1] = x32(src[4:])
+	block[0] = binary.BigEndian.Uint32(src[0:])
+	block[1] = binary.BigEndian.Uint32(src[4:])
 	ct := dec_32_128(block, c.xk)
-	w32(ct[0], dst[0:])
-	w32(ct[1], dst[4:])
+	binary.BigEndian.PutUint32(dst[0:], ct[0])
+	binary.BigEndian.PutUint32(dst[4:], ct[1])
 }
 
 func (c *speck64k128) Encrypt(dst, src []byte) {
 	var block [2]uint32
-	block[0] = x32(src[0:])
-	block[1] = x32(src[4:])
+	block[0] = binary.BigEndian.Uint32(src[0:])
+	block[1] = binary.BigEndian.Uint32(src[4:])
 	ct := enc_32_128(block, c.xk)
-	w32(ct[0], dst[0:])
-	w32(ct[1], dst[4:])
+	binary.BigEndian.PutUint32(dst[0:], ct[0])
+	binary.BigEndian.PutUint32(dst[4:], ct[1])
 }
 
 // 16 bit word
@@ -384,20 +312,20 @@ func (c *speck32k64) BlockSize() int { return 4; }
 
 func (c *speck32k64) Decrypt(dst, src []byte) {
 	var block [2]uint16
-	block[0] = x16(src[0:])
-	block[1] = x16(src[2:])
+	block[0] = binary.BigEndian.Uint16(src[0:])
+	block[1] = binary.BigEndian.Uint16(src[2:])
 	ct := dec_16_64(block, c.xk)
-	w16(ct[0], dst[0:])
-	w16(ct[1], dst[2:])
+	binary.BigEndian.PutUint16(dst[0:], ct[0])
+	binary.BigEndian.PutUint16(dst[2:], ct[1])
 }
 
 func (c *speck32k64) Encrypt(dst, src []byte) {
 	var block [2]uint16
-	block[0] = x16(src[0:])
-	block[1] = x16(src[2:])
+	block[0] = binary.BigEndian.Uint16(src[0:])
+	block[1] = binary.BigEndian.Uint16(src[2:])
 	ct := enc_16_64(block, c.xk)
-	w16(ct[0], dst[0:])
-	w16(ct[1], dst[2:])
+	binary.BigEndian.PutUint16(dst[0:], ct[0])
+	binary.BigEndian.PutUint16(dst[2:], ct[1])
 }
 
 type specksz int
@@ -411,7 +339,7 @@ func NewCipher(k []byte, ws specksz) (cipher.Block, error) {
 	case B128K256:
 		var ink [4]uint64
 		for i := 0; i < 3; i++ {
-			ink[i] = x64(k[i * 8:])
+			ink[i] = binary.BigEndian.Uint64(k[i * 8:])
 		}
 		return &speck128k256{
 			xk: kx_64_256(ink),
@@ -419,7 +347,7 @@ func NewCipher(k []byte, ws specksz) (cipher.Block, error) {
 	case B64K128:
 		var ink [4]uint32
 		for i := 0; i < 3; i++ {
-			ink[i] = x32(k[i * 4:])
+			ink[i] = binary.BigEndian.Uint32(k[i * 4:])
 		}
 		return &speck64k128{
 			xk: kx_32_128(ink),
@@ -427,7 +355,7 @@ func NewCipher(k []byte, ws specksz) (cipher.Block, error) {
 	case B32K64:
 		var ink [4]uint16
 		for i := 0; i < 3; i++ {
-			ink[i] = x16(k[i * 2:])
+			ink[i] = binary.BigEndian.Uint16(k[i * 2:])
 		}
 		return &speck32k64{
 			xk: kx_16_64(ink),
