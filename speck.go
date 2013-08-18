@@ -11,6 +11,9 @@ import (
 	"fmt"
 	"errors"
 	"encoding/binary"
+	"bytes"
+	"sort"
+	"math/rand"
 )	
 
 // n = word size (16, 24, 32, 48, or 64)
@@ -25,23 +28,26 @@ import (
 //		= 28 or 29 if n = 48, m = 2 or 3
 //		= 32, 33, or 34 if n = 64, m = 2, 3, or 4
 
+func rcs64(w uint64, s uint) uint64 { return (w >> s) | (w << (64-s)); }
+func lcs64(w uint64, s uint) uint64 { return (w << s) | (w >> (64-s)); }
+func rcs32(w uint32, s uint) uint32 { return (w >> s) | (w << (32-s)); }
+func lcs32(w uint32, s uint) uint32 { return (w << s) | (w >> (32-s)); }
+func rcs16(w uint16, s uint) uint16 { return (w >> s) | (w << (16-s)); }
+func lcs16(w uint16, s uint) uint16 { return (w << s) | (w >> (16-s)); }
+
 func kx_64_256(ink [4]uint64) (outk [34]uint64) {
 	T := uint(34)
 	m := uint(4)
-	n := uint(64)
-
-	_rcs := func(w uint64, s uint) uint64 { return (w >> s) | (w << (n-s)); }
-	_lcs := func(w uint64, s uint) uint64 { return (w << s) | (w >> (n-s)); }
 	
 	outk[0] = ink[0]
 
 	for i := uint(0); i < (T-1); i++ {
 		idx := 1 + i % (m-1)
 
-		ink[idx] = _rcs(ink[idx], 8)
+		ink[idx] = rcs64(ink[idx], 8)
 		ink[idx] += ink[0]
 		ink[idx] ^= uint64(i)
-		ink[0] = _lcs(ink[0], 3)
+		ink[0] = lcs64(ink[0], 3)
 		ink[0] ^= ink[idx]		
 
 		outk[i + 1] = ink[0]
@@ -52,16 +58,12 @@ func kx_64_256(ink [4]uint64) (outk [34]uint64) {
 
 func enc_64_256(block [2]uint64, kx [34]uint64) [2]uint64 {
 	T := uint(34)
-	n := uint(64)
-
-	_rcs := func(w uint64, s uint) uint64 { return (w >> s) | (w << (n-s)); }
-	_lcs := func(w uint64, s uint) uint64 { return (w << s) | (w >> (n-s)); }
 
 	for i := uint(0); i < T; i++ {
-		block[1] = _rcs(block[1], 8)
+		block[1] = rcs64(block[1], 8)
 		block[1] += block[0]
 		block[1] ^= kx[i]
-		block[0] = _lcs(block[0], 3)
+		block[0] = lcs64(block[0], 3)
 		block[0] ^= block[1]		
 	}
 
@@ -70,17 +72,13 @@ func enc_64_256(block [2]uint64, kx [34]uint64) [2]uint64 {
 
 func dec_64_256(block [2]uint64, kx [34]uint64) [2]uint64 {
 	T := uint(34)
-	n := uint(64)
-
-	_rcs := func(w uint64, s uint) uint64 { return (w >> s) | (w << (n-s)); }
-	_lcs := func(w uint64, s uint) uint64 { return (w << s) | (w >> (n-s)); }
 
 	for i := T; i > 0; i-- {
 		block[0] ^= block[1]
-		block[0] = _rcs(block[0], 3)
+		block[0] = rcs64(block[0], 3)
 		block[1] ^= kx[i-1]
 		block[1] -= block[0]
-		block[1] = _lcs(block[1], 8)
+		block[1] = lcs64(block[1], 8)
 	}
 
 	return block
@@ -89,20 +87,16 @@ func dec_64_256(block [2]uint64, kx [34]uint64) [2]uint64 {
 func kx_32_128(ink [4]uint32) (outk [27]uint32) {
 	T := uint(27)
 	m := uint(4)
-	n := uint(32)
-
-	_rcs := func(w uint32, s uint) uint32 { return (w >> s) | (w << (n-s)); }
-	_lcs := func(w uint32, s uint) uint32 { return (w << s) | (w >> (n-s)); }
 	
 	outk[0] = ink[0]
 
 	for i := uint(0); i < (T-1); i++ {
 		idx := 1 + i % (m-1)
 
-		ink[idx] = _rcs(ink[idx], 8)
+		ink[idx] = rcs32(ink[idx], 8)
 		ink[idx] += ink[0]
 		ink[idx] ^= uint32(i)
-		ink[0] = _lcs(ink[0], 3)
+		ink[0] = lcs32(ink[0], 3)
 		ink[0] ^= ink[idx]		
 
 		outk[i + 1] = ink[0]
@@ -113,16 +107,12 @@ func kx_32_128(ink [4]uint32) (outk [27]uint32) {
 
 func enc_32_128(block [2]uint32, kx [27]uint32) [2]uint32 {
 	T := uint(27)
-	n := uint(32)
-
-	_rcs := func(w uint32, s uint) uint32 { return (w >> s) | (w << (n-s)); }
-	_lcs := func(w uint32, s uint) uint32 { return (w << s) | (w >> (n-s)); }
 
 	for i := uint(0); i < T; i++ {
-		block[1] = _rcs(block[1], 8)
+		block[1] = rcs32(block[1], 8)
 		block[1] += block[0]
 		block[1] ^= kx[i]
-		block[0] = _lcs(block[0], 3)
+		block[0] = lcs32(block[0], 3)
 		block[0] ^= block[1]		
 	}
 
@@ -131,17 +121,13 @@ func enc_32_128(block [2]uint32, kx [27]uint32) [2]uint32 {
 
 func dec_32_128(block [2]uint32, kx [27]uint32) [2]uint32 {
 	T := uint(27)
-	n := uint(32)
-
-	_rcs := func(w uint32, s uint) uint32 { return (w >> s) | (w << (n-s)); }
-	_lcs := func(w uint32, s uint) uint32 { return (w << s) | (w >> (n-s)); }
 
 	for i := T; i > 0; i-- {
 		block[0] ^= block[1]
-		block[0] = _rcs(block[0], 3)
+		block[0] = rcs32(block[0], 3)
 		block[1] ^= kx[i-1]
 		block[1] -= block[0]
-		block[1] = _lcs(block[1], 8)
+		block[1] = lcs32(block[1], 8)
 	}
 
 	return block
@@ -150,20 +136,16 @@ func dec_32_128(block [2]uint32, kx [27]uint32) [2]uint32 {
 func kx_16_64(ink [4]uint16) (outk [22]uint16) {
 	T := uint(22)
 	m := uint(4)
-	n := uint(16)
-
-	_rcs := func(w uint16, s uint) uint16 { return (w >> s) | (w << (n-s)); }
-	_lcs := func(w uint16, s uint) uint16 { return (w << s) | (w >> (n-s)); }
 	
 	outk[0] = ink[0]
 
 	for i := uint(0); i < (T-1); i++ {
 		idx := 1 + i % (m-1)
 
-		ink[idx] = _rcs(ink[idx], 7)
+		ink[idx] = rcs16(ink[idx], 7)
 		ink[idx] += ink[0]
 		ink[idx] ^= uint16(i)
-		ink[0] = _lcs(ink[0], 2)
+		ink[0] = lcs16(ink[0], 2)
 		ink[0] ^= ink[idx]		
 
 		outk[i + 1] = ink[0]
@@ -174,16 +156,12 @@ func kx_16_64(ink [4]uint16) (outk [22]uint16) {
 
 func enc_16_64(block [2]uint16, kx [22]uint16) [2]uint16 {
 	T := uint(22)
-	n := uint(16)
-
-	_rcs := func(w uint16, s uint) uint16 { return (w >> s) | (w << (n-s)); }
-	_lcs := func(w uint16, s uint) uint16 { return (w << s) | (w >> (n-s)); }
 
 	for i := uint(0); i < T; i++ {
-		block[1] = _rcs(block[1], 7)
+		block[1] = rcs16(block[1], 7)
 		block[1] += block[0]
 		block[1] ^= kx[i]
-		block[0] = _lcs(block[0], 2)
+		block[0] = lcs16(block[0], 2)
 		block[0] ^= block[1]		
 	}
 
@@ -192,17 +170,13 @@ func enc_16_64(block [2]uint16, kx [22]uint16) [2]uint16 {
 
 func dec_16_64(block [2]uint16, kx [22]uint16) [2]uint16 {
 	T := uint(22)
-	n := uint(16)
-
-	_rcs := func(w uint16, s uint) uint16 { return (w >> s) | (w << (n-s)); }
-	_lcs := func(w uint16, s uint) uint16 { return (w << s) | (w >> (n-s)); }
 
 	for i := T; i > 0; i-- {
 		block[0] ^= block[1]
-		block[0] = _rcs(block[0], 2)
+		block[0] = rcs16(block[0], 2)
 		block[1] ^= kx[i-1]
 		block[1] -= block[0]
-		block[1] = _lcs(block[1], 7)
+		block[1] = lcs16(block[1], 7)
 	}
 
 	return block
@@ -351,46 +325,85 @@ func NewCipher(k []byte, ws specksz) (cipher.Block, error) {
 	return nil, errors.New("bad key size")
 }
 
-func main() { 
-	pt := []byte(`
-I have passed with a nod of the head
-Or polite meaningless words,
-Or have lingered awhile and said
-Polite meaningless words,
-`)
-	k := []byte("DOT DASH DOT DASH DOT DASH DASH!")
-
-	c, err := NewCipher(k, B128K256)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	iv := make([]byte, 0)
-	for i := 0; i < c.BlockSize(); i++ {
-		iv = append(iv, byte(0))
-	}
-
-	spill := len(pt) % c.BlockSize()
-	if spill == 0 {
-		for i := 0; i < c.BlockSize(); i++ {
-			pt = append(pt, byte(c.BlockSize()))
-		}
-	} else {
-		pad := c.BlockSize() - spill
-		for i := 0; i < pad; i++ {
-			pt = append(pt, byte(pad))
-		}
-	}	
-
-	mode := cipher.NewCBCEncrypter(c, iv)
-	ciphertext := make([]byte, len(pt))
-	mode.CryptBlocks(ciphertext, pt)
-
-	fmt.Println(ciphertext)
-	
-	mode = cipher.NewCBCDecrypter(c, iv)
-	mode.CryptBlocks(pt, ciphertext)
-
-	fmt.Println(string(pt))
+type PrefixCipher struct {
+	max uint
+	enc []uint
+	dec []uint
 }
+
+type ciphertext struct {
+	raw []byte
+	idx uint
+}
+type permutation []ciphertext
+
+func (p permutation) Len() int { 
+	return len(p) 
+}
+func (p permutation) Swap(i, j int) { 
+	p[i], p[j] = p[j], p[i]
+}
+func (p permutation) Less(i, j int) bool { 
+	if bytes.Compare(p[i].raw, p[j].raw) < 0 {
+		return true
+	} 
+	return false
+}
+
+func NewPrefix(n uint, b cipher.Block) *PrefixCipher {
+	p := PrefixCipher{
+		max: n,
+		enc: make([]uint, n),
+		dec: make([]uint, n),
+	}
+
+	perm := make(permutation, 0)
+
+	for i := uint(0); i < p.max; i++ { 
+		inp := make([]byte, b.BlockSize())
+		raw := make([]byte, b.BlockSize())
+		
+		binary.BigEndian.PutUint32(inp[0:], uint32(i))
+
+		b.Encrypt(raw, inp)
+
+		perm = append(perm, ciphertext{
+			raw: raw,
+			idx: i,
+		})
+	}
+
+	sort.Sort(perm)
+	
+	for i := uint(0); i < p.max; i++ { 
+		p.enc[perm[i].idx] = i
+		p.dec[i] = perm[i].idx
+	}
+
+	return &p
+}
+
+func (p *PrefixCipher) Encrypt(plain uint) uint {
+	return p.enc[plain]
+}
+
+func (p *PrefixCipher) Decrypt(cipher uint) uint {
+	return p.dec[cipher]
+}
+
+func main() { 
+	k := []byte("YELLOW SUBMARINE")
+	b, _ := NewCipher(k, B64K128)
+	pc := NewPrefix(10000, b)
+	
+	r := rand.New(rand.NewSource(99))
+
+	for i := 0; i < 100; i++ { 
+		v := r.Uint32() % 10000
+		x := pc.Encrypt(uint(v))
+		y := pc.Decrypt(x)
+		fmt.Printf("in: %d out: %d recover: %d\n", v, x, y)
+	}
+
+}
+
